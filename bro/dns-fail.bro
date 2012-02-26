@@ -28,8 +28,7 @@ function check_threshold(orig_h: addr): bool
 	{
 		if ( failed_queries[orig_h] % failed_queries_trigger == 0 )
 			{
-			local msg = fmt("%s has generated %d failed DNS queries",
-											orig_h, failed_queries[orig_h]);
+			local msg = fmt("%s has generated %d failed DNS queries", orig_h, failed_queries[orig_h]);
 			print msg;
 			if ( logging )
 				print dns_fail_log, msg;
