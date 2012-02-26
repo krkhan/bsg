@@ -58,7 +58,7 @@ event bro_done()
 	{
 	if ( logging )
 		{
-			print dns_fail_log, "Summary:"
+			print dns_fail_log, "Summary:";
 			for ( orig_h in failed_queries )
 				{
 					print dns_fail_log, fmt("%s %d", orig_h, failed_queries[orig_h]);
