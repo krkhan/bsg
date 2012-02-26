@@ -30,9 +30,12 @@ function check_threshold(orig_h: addr): bool
 			{
 			local msg = fmt("%s has generated %d failed DNS queries",
 				orig_h, failed_queries[orig_h]);
-			print msg;
+
 			if ( logging )
 				print dns_fail_log, msg;
+
+			NOTICE([$note=DNSFailThreshold, $src=orig_h, $n=failed_queries[orig_h],
+				$msg=msg]);
 			}
 
 		return F;
