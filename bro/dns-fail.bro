@@ -26,19 +26,19 @@ global dns_fail_log: file;
 
 function check_threshold(orig_h: addr): bool
 	{
-		if ( failed_queries[orig_h] % failed_queries_trigger == 0 )
-			{
-			local msg = fmt("%s has generated %d failed DNS queries",
-				orig_h, failed_queries[orig_h]);
+	if ( failed_queries[orig_h] % failed_queries_trigger == 0 )
+		{
+		local msg = fmt("%s has generated %d failed DNS queries",
+			orig_h, failed_queries[orig_h]);
 
-			if ( logging )
-				print dns_fail_log, msg;
+		if ( logging )
+			print dns_fail_log, msg;
 
-			NOTICE([$note=DNSFailThreshold, $src=orig_h, $n=failed_queries[orig_h],
-				$msg=msg]);
-			}
+		NOTICE([$note=DNSFailThreshold, $src=orig_h, $n=failed_queries[orig_h],
+			$msg=msg]);
+		}
 
-		return F;
+	return F;
 	}
 
 event bro_init()
@@ -61,11 +61,11 @@ event bro_done()
 	{
 	if ( logging )
 		{
-			print dns_fail_log, "Summary:";
-			for ( orig_h in failed_queries )
-				{
-					print dns_fail_log, fmt("%s %d", orig_h, failed_queries[orig_h]);
-				}
+		print dns_fail_log, "Summary:";
+		for ( orig_h in failed_queries )
+			{
+				print dns_fail_log, fmt("%s %d", orig_h, failed_queries[orig_h]);
+			}
 		}
 	}
 
