@@ -1,9 +1,9 @@
-@load dns
+@load base/protocols/dns
 
 module DNSFail;
 
 export {
-	redef enum Notice += {
+	redef enum Notice::Type += {
 		DNSFailThreshold,	# the source has generated a number of failed DNS queries
 	};
 
