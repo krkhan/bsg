@@ -3,8 +3,15 @@
 module DNSFail;
 
 export {
+	redef enum Log::ID += { LOG };
+
 	redef enum Notice::Type += {
 		DNSFailThreshold,	# the source has generated a number of failed DNS queries
+	};
+
+	type Info: record {
+		orig_h:           addr          &log;
+		failed_queries:   count         &log;
 	};
 
 	# If true, we consider only the DNS queries with rcode == 3 (Does Not Exist)
@@ -14,11 +21,9 @@ export {
 	# Threshold for reporting failed queries
 	const failed_queries_trigger = 100 &redef;
 
-	# Set to false to disable printing to dns-fail.log
-	const logging = T &redef;
-
-	global check_threshold:
-		function(orig_h: addr): bool;
+	# Event handler for logging
+	global log_dns_fail:
+		event(rec: Info);
 }
 
 global failed_queries: table[addr] of count &default = 0;
@@ -31,9 +36,6 @@ function check_threshold(orig_h: addr): bool
 		local msg = fmt("%s has generated %d failed DNS queries",
 			orig_h, failed_queries[orig_h]);
 
-		if ( logging )
-			print dns_fail_log, msg;
-
 		NOTICE([$note=DNSFailThreshold, $src=orig_h, $n=failed_queries[orig_h],
 			$msg=msg]);
 		}
@@ -43,8 +45,7 @@ function check_threshold(orig_h: addr): bool
 
 event bro_init()
 	{
-	if ( logging )
-		dns_fail_log = open_log_file("dns-fail");
+	Log::create_stream(DNSFail::LOG, [$columns=Info, $ev=log_dns_fail]);
 	}
 
 event dns_message(c: connection, is_orig: bool, msg: dns_msg, len: count)
@@ -59,13 +60,13 @@ event dns_message(c: connection, is_orig: bool, msg: dns_msg, len: count)
 
 event bro_done()
 	{
-	if ( logging )
+	for ( orig_h in failed_queries )
 		{
-		print dns_fail_log, "Summary:";
-		for ( orig_h in failed_queries )
-			{
-				print dns_fail_log, fmt("%s %d", orig_h, failed_queries[orig_h]);
-			}
+			local rec: DNSFail::Info = [
+				$orig_h=orig_h,
+				$failed_queries=failed_queries[orig_h]
+			];
+			Log::write(DNSFail::LOG, rec);
 		}
 	}
 
