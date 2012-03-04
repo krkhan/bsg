@@ -1,4 +1,4 @@
-redef signature_files += "cnc.sig";
+@load cnc-blacklist
 
 module CNC;
 
@@ -24,19 +24,19 @@ event bro_init()
 	Log::create_stream(CNC::LOG, [$columns=Info, $ev=log_cnc]);
 }
 
-event signature_match(state: signature_state, msg: string, data: string)
-	{
-		if ( msg == /cnc.*/ )
-			{
-			local c: connection = state$conn;
-			local info: Info;
+event new_connection(c: connection)
+{
+	if ( c$id$orig_h in CNC_Blacklist::addrs
+			|| c$id$resp_h in CNC_Blacklist::addrs)
+		{
+		local info: Info;
 
-			info$ts       = network_time();
-			info$id       = c$id;
-			info$uid      = c$uid;
-			info$proto    = get_conn_transport_proto(c$id);
+		info$ts = network_time();
+		info$id = c$id;
+		info$uid = c$uid;
+		info$proto = get_conn_transport_proto(c$id);
 
-			Log::write(CNC::LOG, info);
-			}
-	}
+		Log::write(CNC::LOG, info);
+		}
+}
 
