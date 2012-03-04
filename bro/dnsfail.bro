@@ -6,7 +6,8 @@ export {
 	redef enum Log::ID += { LOG };
 
 	redef enum Notice::Type += {
-		DNSFailThreshold,	# the source has generated a number of failed DNS queries
+		# the source has generated a number of failed DNS queries
+		DNSFail_Threshold_Reached,
 	};
 
 	type Info: record {
@@ -19,7 +20,7 @@ export {
 	const strict_rcode_checking = T &redef;
 
 	# Threshold for reporting failed queries
-	const failed_queries_trigger = 100 &redef;
+	const failed_queries_trigger = 3 &redef;
 
 	# Event handler for logging
 	global log_dns_fail:
@@ -36,8 +37,8 @@ function check_threshold(orig_h: addr): bool
 		local msg = fmt("%s has generated %d failed DNS queries",
 			orig_h, failed_queries[orig_h]);
 
-		NOTICE([$note=DNSFailThreshold, $src=orig_h, $n=failed_queries[orig_h],
-			$msg=msg]);
+		NOTICE([$note=DNSFail_Threshold_Reached, $src=orig_h,
+			$n=failed_queries[orig_h], $msg=msg]);
 		}
 
 	return F;
