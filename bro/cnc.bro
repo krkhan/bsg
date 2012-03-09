@@ -20,12 +20,12 @@ export {
 }
 
 event bro_init()
-{
+	{
 	Log::create_stream(CNC::LOG, [$columns=Info, $ev=log_cnc]);
-}
+	}
 
 event new_connection(c: connection)
-{
+	{
 	if ( c$id$orig_h in CNC_Blacklist::addrs
 			|| c$id$resp_h in CNC_Blacklist::addrs)
 		{
@@ -38,5 +38,5 @@ event new_connection(c: connection)
 
 		Log::write(CNC::LOG, info);
 		}
-}
+	}
 
