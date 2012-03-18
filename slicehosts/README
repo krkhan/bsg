@@ -1,0 +1,16 @@
+                                Pcap Host Slicer
+
+This program can be used to extract multiple pcap files out of a single pcap
+dump based on a list of hosts.
+
+                                     Usage
+
+  pcapslicer pcapfile iplist
+
+"pcapfile" is the trace that needs to be splitted. "iplist" contains a list of
+IP addresses, one per each line, that need to be extracted from the trace.
+
+Only IPv4 addresses are supported and consequently only IPv4 packets are
+extracted. The extracted traces are generated in the current directory in the
+form of "a.b.c.d.pcap" files, where a.b.c.d are quad-dotted IP addresses.
+
