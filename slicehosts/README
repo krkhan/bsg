@@ -5,7 +5,7 @@ dump based on a list of hosts.
 
                                      Usage
 
-  pcapslicer pcapfile iplist
+  slicehosts pcapfile iplist
 
 "pcapfile" is the trace that needs to be splitted. "iplist" contains a list of
 IP addresses, one per each line, that need to be extracted from the trace.
