@@ -12,10 +12,10 @@
 ##! Low port trolling (essentially port scan on ports <1024).
 ##!--------------------------------------------------------------------
 
-
-@load base/frameworks/notice/main
+@load botflex/services/blacklist_mgr
 @load botflex/config
-@load utils/types
+@load botflex/utils/types
+@load base/frameworks/notice/main
 
 module Scan;
 
@@ -52,10 +52,6 @@ export {
 	const landmine_thresh_trigger = 5 &redef;
 
 	const landmine_address: set[addr] &redef;
-	
-	const critical_ports: set[port] = { 1234/tcp, 445/tcp, 27971/tcp, 80/tcp, 3389/tcp, 8080/tcp, 51413/tcp,
-					    1433/tcp, 53224/tcp, 135/tcp
-	} &redef;
 
 	const scan_summary_trigger = 25 &redef;
 	const port_summary_trigger = 20 &redef;
@@ -178,8 +174,8 @@ export {
 	global pre_distinct_peers: table[addr] of set[addr]
 		&create_expire = 15 mins &redef;
 	
-	const wnd_addr_scan = 15mins;
-	const wnd_port_scan = 15mins;
+	const wnd_addr_scan = 15mins &redef;
+	const wnd_port_scan = 15mins &redef;
 
 	global distinct_peers: table[addr] of set[addr]
 		&create_expire = wnd_addr_scan &expire_func=scan_summary &redef;
@@ -224,53 +220,43 @@ export {
 			&default=0 &read_expire = 1 days &redef;
 }
 
-	event bro_init()
+	event bro_init() &priority=3
 		{
-		if ( "scan" in Config::table_config?  )
+		if ( "scan" in Config::table_config )
 			{
 			if ( "th_addr_scan" in Config::table_config["scan"] )
 				{
-				for ( rec in report_peer_scan )
-					delete rec;
-				for ( rec in report_outbound_peer_scan )
-					delete rec;
-				report_peer_scan[0] = Config::table_config["scan"]["th_addr_scan"];
-				report_outbound_peer_scan[0] = Config::table_config["scan"]["th_addr_scan"];
+				report_peer_scan[0] = to_count(Config::table_config["scan"]["th_addr_scan"]);
+				report_outbound_peer_scan[0] = to_count(Config::table_config["scan"]["th_addr_scan"]);
 				}
-			}
 
 			if ( "th_addr_scan_critical" in Config::table_config["scan"] )
 				{
-				for ( rec in report_critical_peer_scan )
-					delete rec;
-				for ( rec in report_critical_outbound_peer_scan )
-					delete rec;
-				report_critical_peer_scan[0] = Config::table_config["scan"]["th_addr_scan_critical"];
-				report_critical_outbound_peer_scan[0] = Config::table_config["scan"]["th_addr_scan_critical"];
+				report_critical_peer_scan[0] = to_count(Config::table_config["scan"]["th_addr_scan_critical"]);
+				report_critical_outbound_peer_scan[0] = to_count(Config::table_config["scan"]["th_addr_scan_critical"]);
 				}
 
 			if ( "th_port_scan" in Config::table_config["scan"] )
 				{
-				for ( rec in report_port_scan )
-					delete rec;
-				report_port_scan[0] = Config::table_config["scan"]["th_port_scan"];
+				report_port_scan[0] = to_count(Config::table_config["scan"]["th_port_scan"]);
 				}
 
 			if ( "th_low_port_troll" in Config::table_config["scan"] )
 				{
-				priv_scan_trigger = Config::table_config["scan"]["th_low_port_troll"];
+				priv_scan_trigger = to_count(Config::table_config["scan"]["th_low_port_troll"]);
 				}
 
 			if ( "wnd_addr_scan" in Config::table_config["scan"] )
 				{
-				priv_scan_trigger = Config::table_config["scan"]["wnd_addr_scan"];
+				wnd_addr_scan = string_to_interval(Config::table_config["scan"]["wnd_addr_scan"]);
 				}
 
 			if ( "wnd_port_scan" in Config::table_config["scan"] )
 				{
-				priv_scan_trigger = Config::table_config["scan"]["wnd_port_scan"];
+				wnd_port_scan = string_to_interval(Config::table_config["scan"]["wnd_port_scan"]);
 				}
 			}
+
 		}	
 
 
@@ -471,14 +457,14 @@ function check_scan(c: connection, established: bool, reverse: bool): bool
 					local address_scan = F;
 					if ( outbound &&
 					     # inside host scanning out?
-					     service in critical_ports?
+					     service in BlacklistMgr::blacklist_bad_ports?
 					     thresh_check(report_critical_outbound_peer_scan, rcops_idx, orig, n):
 					     thresh_check(report_outbound_peer_scan, rops_idx, orig, n) )
 						{
 						address_scan = T;
 
 						local submsg = "";
-						if ( service in critical_ports )
+						if ( service in BlacklistMgr::blacklist_bad_ports )
 							submsg = "critical";
 						else
 							submsg = "-";
@@ -492,14 +478,14 @@ function check_scan(c: connection, established: bool, reverse: bool): bool
 						}	
 
 					if ( ! outbound &&
-					     service in critical_ports?
+					     service in BlacklistMgr::blacklist_bad_ports?
 					     thresh_check(report_critical_peer_scan, rcops_idx, orig, n):
 					     thresh_check(report_peer_scan, rops_idx, orig, n) )
 						{
 						address_scan = T;
 
 						local subms = "";
-						if ( service in critical_ports )
+						if ( service in BlacklistMgr::blacklist_bad_ports )
 							subms = "critical";
 						else
 							subms = "-";

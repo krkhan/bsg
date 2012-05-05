@@ -15,6 +15,9 @@ export {
 	## the corresponding entry in tb_blacklists (where subnets were strings) 
 	const blacklist_rbn_subnet: set[subnet] &redef; 
 
+	## Blacklist of most exploited / vulnerable ports
+	const blacklist_bad_ports: set[port] &redef; 
+
 	## Name of the file that contains filenames of different blacklists
 	## such as cnc_ip, cnc_url, spam_ip, bad_ip etc. The format of the file
 	## is such that each line should represent a single file preceded by its
@@ -66,8 +69,18 @@ event get_blacklists(srcfile: string) &priority=30
 			# delete the redundant string version of the subnet list from tb_blacklists
 			delete tb_blacklists[file_id];
 			}
-		}
+		## If it is a blacklist comprising ports, place it in a separate list
+		## meant for holding ports and not ports represented as strings.
+		if ( file_id == "bad_ports" )
+			{
+			for ( str_port in tb_blacklists[file_id] )
+				add blacklist_bad_ports[ to_port(str_port+"/tcp") ];
 
+			# delete the redundant string version of the ports list from tb_blacklists
+			delete tb_blacklists[file_id];
+			}
+		
+		}
 	schedule blacklist_update_interval { BlacklistMgr::get_blacklists(blacklist_srcfile) };	
 	}
 

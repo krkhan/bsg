@@ -16,8 +16,12 @@ export {
 
 	type Info: record {
 		ts:                	time             &log;
-		src_ip:            	addr             &log;
-		summary:                string  	 &log;
+		our_ip:            	addr             &log;
+		egg_ip:                 string  	 &log;
+		egg_url:                string  	 &log;
+		md5:                    string  	 &log;
+		disguised_ip:           string  	 &log;
+		disguised_url:          string  	 &log;
 		msg:  	 	        string  	 &log;
 		
 	};
@@ -45,16 +49,17 @@ export {
 	global tb_tributary_string: table[ egg_tributary ] of string &redef; 
 
 	## Thresholds for different contributors to the major event of egg download/upload
-	const tcymru_match_threshold = 0 &redef;
-	const disguised_exe_threshold = 0 &redef;
+	const disguised_exe_threshold = 1 &redef;
 
 	## The event that sufficient evidence has been gathered to declare the
 	## egg download phase of botnet infection lifecycle
-	global egg_download: event( ts: time, src_ip: addr, malicious_ips: set[IpUrlMD5Record] );
+	global egg_download: event( ts: time, src_ip: addr, egg_ip: string, egg_url: string,
+				    md5: string, disguised_ip: set[string], disguised_url: set[string], msg: string );
 
 	## The event that sufficient evidence has been gathered to declare the
 	## egg upload tributary in attack phase of botnet infection lifecycle
-	global egg_upload: event( ts: time, src_ip: addr, malicious_ips: set[IpUrlMD5Record] );
+	global egg_upload: event( ts: time, src_ip: addr, egg_url: string,
+				    md5: string, msg: string );
 
 	## Event that can be handled to access the egg_download
 	## record as it is sent on to the logging framework.
@@ -101,11 +106,16 @@ redef Notice::policy += {
 ## Type of the value of the global table table_egg
 ## Additional contributary factors that increase the confidence
 ## about major event egg_download/upload should be added here 
+type egg_record_tag: enum { Download, Upload };
 type EggRecord: record {
+    tag: egg_record_tag;
     tb_tributary: table[ egg_tributary ] of bool;
-    n_tcymru_matches: count &default=0;
-    n_disguised_exes: count &default=0;	
-    ip_url_md5: set[IpUrlMD5Record] &optional;  	
+    egg_ip: string &default="";
+    egg_url: string &default="";		 
+    md5: string &default="";
+    n_disguised_exes: count &default=0;	 	
+    disguised_ip: set[string]; 
+    disguised_url: set[string];  		
 };
 
 
@@ -114,23 +124,19 @@ event bro_init() &priority=5
 	Log::create_stream(Egg::LOG_DOWN, [$columns=Info, $ev=log_egg_download]);
 	Log::create_stream(Egg::LOG_UP, [$columns=Info, $ev=log_egg_upload]);
 
-	if ( "egg-download" in Config::table_config  )
+	if ( "egg" in Config::table_config  )
 			{
-			if ( "th_disguised_exe" in Config::table_config["egg-download"] )
+			if ( "th_disguised_exe" in Config::table_config["egg"] )
 				{
-				disguised_exe_threshold = to_count(Config::table_config["egg-download"]["th_disguised_exe"]);
+				disguised_exe_threshold = to_count(Config::table_config["egg"]["th_disguised_exe"]);
 				}
-			if ( "th_tcymru_match" in Config::table_config["egg-download"] )
+			if ( "wnd_egg" in Config::table_config["egg"] )
 				{
-				tcymru_match_threshold = to_count(Config::table_config["egg-download"]["th_tcymru_match"]);
+				wnd_egg = string_to_interval(Config::table_config["egg"]["wnd_egg"]);
 				}
-			if ( "wnd_egg" in Config::table_config["egg-download"] )
+			if ( "evaluation_mode" in Config::table_config["egg"] )
 				{
-				wnd_egg = string_to_interval(Config::table_config["egg-download"]["wnd_egg"]);
-				}
-			if ( "evaluation_mode" in Config::table_config["egg-download"] )
-				{
-				egg_evaluation_mode = string_to_evaluationmode(Config::table_config["egg-download"]["evaluation_mode"]);
+				egg_evaluation_mode = string_to_evaluationmode(Config::table_config["egg"]["evaluation_mode"]);
 				}	
 			}
 	## Map all possible values of enum cnc_tributary to corresponding strings
@@ -185,7 +191,7 @@ function get_majority( tb : table[egg_tributary] of bool ): bool
 ## should be generated. It is called (i) every time an entry in the global table 
 ## table_egg reaches certain age defined by the table attribute &create_expire, or 
 ## (ii) Any of the counters for a source ip exceed their fixed thresholds. 
-function evaluate( src_ip: addr, t: table[addr] of EggRecord )
+function evaluate( src_ip: addr, t: table[addr] of EggRecord ): bool
 	{
 	local do_report: bool;
 	if ( egg_evaluation_mode == OR )
@@ -196,39 +202,39 @@ function evaluate( src_ip: addr, t: table[addr] of EggRecord )
 		do_report = get_majority(t[src_ip]$tb_tributary);
 		
 	if( do_report )
-		{ print "Do report";
+		{ 
 		## Log egg download related entries
 		egg_info$ts = network_time();
-		egg_info$src_ip = src_ip;
-		local summ = "";
-		for (rec in t[src_ip]$ip_url_md5)
-			{
-			summ = summ + fmt("[ %s, %s, %s ] ",rec$ip, rec$url, rec$md5 );
-			} 
-		egg_info$summary = summ;
+		egg_info$our_ip = src_ip;
+		egg_info$egg_ip = t[src_ip]$egg_ip; 
+		egg_info$egg_url = t[src_ip]$egg_url; 
+		egg_info$md5 = t[src_ip]$md5;
+		local str_disguised_ip = setstr_to_string(t[src_ip]$disguised_ip, ","); 
+		egg_info$disguised_ip = str_disguised_ip;	
+		local str_disguised_url = setstr_to_string(t[src_ip]$disguised_url, ","); 
+		egg_info$disguised_url = str_disguised_url;
+
 		## Other contributory factors to the event egg down/upload should
 		## be appended to this msg.
-		local mesg = "";
+		local msg = "";
 		for ( itm in t[src_ip]$tb_tributary )
-			mesg = mesg + tb_tributary_string[itm] + ",";
-		egg_info$msg = mesg;
+			msg = msg + tb_tributary_string[itm] + ",";
+		egg_info$msg = msg;
 		
-		local outbound = Site::is_local_addr(src_ip);
-		print "outbound";print outbound;print "--------------";
-		if ( !outbound )
+		if ( t[src_ip]$tag == Download )
 			{
-    			event egg_download( network_time(), src_ip, t[src_ip]$ip_url_md5);
+    			event egg_download( network_time(), src_ip, t[src_ip]$egg_ip, t[src_ip]$egg_url, t[src_ip]$md5,
+					    t[src_ip]$disguised_ip, t[src_ip]$disguised_url, msg );
 			Log::write(Egg::LOG_DOWN,egg_info);
 			}
 		else
 			{
-    			event egg_upload( network_time(), src_ip, t[src_ip]$ip_url_md5);
+    			event egg_upload( network_time(), src_ip, t[src_ip]$egg_url, t[src_ip]$md5, msg );
 			Log::write(Egg::LOG_UP,egg_info);
 			}
-
-		delete t[src_ip];
-		print t;
+		return T;
 		}
+	return F;
 	}
 
 
@@ -244,50 +250,137 @@ function get_egg_record(): EggRecord
 	{
 	local rec: EggRecord;
 
-	local u: set[IpUrlMD5Record];
-	rec$ip_url_md5 = u; 
+	local s1: set[string];
+	rec$disguised_ip = s1; 
+
+	local s2: set[string];
+	rec$disguised_url = s2;
 
 	return rec;
 	}
 
 ## The global state table that maintains various information pertaining to the
-## major event egg_down/upload, and is analyzed when a decision has to be made
-## whether or not to declare the major event egg_down/upload.
-global table_egg: table[addr] of EggRecord &create_expire=30mins &expire_func=egg_record_expired;
+## major event egg_down, and is analyzed when a decision has to be made
+## whether or not to declare the major event egg_download.
+global table_egg_download: table[addr] of EggRecord &create_expire=wnd_egg &expire_func=egg_record_expired;
+
+## The global state table that maintains various information pertaining to the
+## major event egg_upload, and is analyzed when a decision has to be made
+## whether or not to declare the major event egg_upload.
+global table_egg_upload: table[addr] of EggRecord &create_expire=wnd_egg &expire_func=egg_record_expired;
 
 event tcymru_match( ts: time, src_ip: addr, dst_ip: addr, url: string, md5: string )
 	{
-	## src_ip seen for the first time
-	if (src_ip !in table_egg)
-		table_egg[src_ip] = get_egg_record();
+	local done: bool;
+	local outbound = Site::is_local_addr(src_ip);
+	local our_ip = outbound? src_ip: dst_ip;
+	local other_ip = outbound? dst_ip: src_ip;
 
-	# Update total number of malicious binary downloads seen
-	++ table_egg[src_ip]$n_tcymru_matches;
+	if ( outbound )
+		{ 
+		## our_ip seen for the first time
+		if (our_ip !in table_egg_download)
+			table_egg_download[our_ip] = get_egg_record();
 
-	add table_egg[src_ip]$ip_url_md5[ [ $ip = dst_ip, $url = url, $md5 = md5 ] ];
+		table_egg_download[our_ip]$tag = Download;
+		table_egg_download[our_ip]$egg_ip = fmt("%s",other_ip);
+		table_egg_download[our_ip]$egg_url = url;
+		table_egg_download[our_ip]$tb_tributary[ Tcymru_match ]=T;
+		table_egg_download[our_ip]$md5 = md5;
 
-	if( table_egg[src_ip]$n_tcymru_matches > tcymru_match_threshold )
-		{
-		table_egg[src_ip]$tb_tributary[ Tcymru_match ]=T;
-		Egg::evaluate( src_ip, table_egg );
-		}	
+		done = Egg::evaluate( our_ip, table_egg_download );
+		if ( done )
+			{
+			delete table_egg_download[our_ip]$tb_tributary[ Tcymru_match ];
+			table_egg_download[our_ip]$egg_ip = "";
+			table_egg_download[our_ip]$egg_url = "";
+			table_egg_upload[our_ip]$md5 = "";			
+			} 
+		}
+	else	
+		{ 
+		## our_ip seen for the first time
+		if (our_ip !in table_egg_upload)
+			table_egg_upload[our_ip] = get_egg_record();
+		
+		table_egg_upload[our_ip]$tag = Upload;
+		table_egg_upload[our_ip]$egg_ip = fmt("%s",other_ip);
+		table_egg_upload[our_ip]$egg_url = url;
+		table_egg_upload[our_ip]$tb_tributary[ Tcymru_match ] = T;
+		table_egg_upload[our_ip]$md5 = md5;
+		
+		done = Egg::evaluate( our_ip, table_egg_upload );
+		## Reset TeamCymru match parameters
+		if ( done )
+			{
+			delete table_egg_upload[our_ip]$tb_tributary[ Tcymru_match ];
+			table_egg_upload[our_ip]$egg_ip = "";
+			table_egg_upload[our_ip]$egg_url = "";
+			table_egg_upload[our_ip]$md5 = "";			
+			} 
+		}
 	}
 
 
 event disguised_exe( ts: time, src_ip: addr, dst_ip: addr, url: string )
 	{
-	## src_ip seen for the first time
-	if (src_ip !in table_egg)
-		table_egg[src_ip] = get_egg_record();
+	local outbound = Site::is_local_addr(src_ip);
+	local our_ip = outbound? src_ip : dst_ip;
+	local other_ip = outbound? dst_ip : src_ip;
 
-	# Update total number of disguised exes seen
-	++ table_egg[src_ip]$n_disguised_exes;
-
-	add table_egg[src_ip]$ip_url_md5[ [ $ip = dst_ip , $url = url, $md5 = "-" ] ];
-
-	if( table_egg[src_ip]$n_disguised_exes > disguised_exe_threshold )
+	if ( outbound )
 		{
-		table_egg[src_ip]$tb_tributary[ Disguised_exe ]=T;
-		Egg::evaluate( src_ip, table_egg );
+		local done: bool;
+		## our_ip seen for the first time
+		if ( our_ip !in table_egg_download )
+			table_egg_download[our_ip] = get_egg_record();
+
+		table_egg_download[our_ip]$tag = Download;
+		++ table_egg_download[our_ip]$n_disguised_exes;
+		add table_egg_download[our_ip]$disguised_ip[ fmt("%s",other_ip) ];
+		add table_egg_download[our_ip]$disguised_url[ url ];
+
+		if( table_egg_download[our_ip]$n_disguised_exes > disguised_exe_threshold )
+			{
+			table_egg_download[our_ip]$tb_tributary[ Disguised_exe ]=T;
+
+			done = Egg::evaluate( our_ip, table_egg_download );
+			## Reset disguised_exe parameters
+			if (done)
+				{
+				delete table_egg_download[our_ip]$tb_tributary[ Disguised_exe ];
+				for ( itm1 in table_egg_download[our_ip]$disguised_url )
+					delete table_egg_download[our_ip]$disguised_url[ itm1 ];
+				for ( itm2 in table_egg_download[our_ip]$disguised_ip )
+					delete table_egg_download[our_ip]$disguised_ip[ itm2 ];
+				}
+			}
+		}
+	else
+		{
+		## our_ip seen for the first time
+		if ( our_ip !in table_egg_upload )
+			table_egg_download[our_ip] = get_egg_record();
+
+		table_egg_upload[our_ip]$tag = Upload;
+		++ table_egg_upload[our_ip]$n_disguised_exes;
+		add table_egg_upload[our_ip]$disguised_ip[ fmt("%s",other_ip) ];
+		add table_egg_upload[our_ip]$disguised_url[ url ];
+
+		if( table_egg_upload[our_ip]$n_disguised_exes > disguised_exe_threshold )
+			{
+			table_egg_upload[our_ip]$tb_tributary[ Disguised_exe ]=T;
+
+			done = Egg::evaluate( our_ip, table_egg_upload );
+			## Reset disguised_exe parameters
+			if (done)
+				{
+				delete table_egg_upload[our_ip]$tb_tributary[ Disguised_exe ];
+				for ( itm1 in table_egg_upload[our_ip]$disguised_url )
+					delete table_egg_upload[our_ip]$disguised_url[ itm1 ];
+				for ( itm2 in table_egg_upload[our_ip]$disguised_ip )
+					delete table_egg_upload[our_ip]$disguised_ip[ itm2 ];
+				}
+			}
 		}
 	}

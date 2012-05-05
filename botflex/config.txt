@@ -12,12 +12,21 @@ exploit th_ssh_login 1
 exploit wnd_breakin 15mins
 exploit wnd_exploit 30mins
 exploit evaluation_mode OR
+exploit evaluation_breakin_mode OR
 
 cnc th_dns_failure 20
 cnc evaluation_mode OR
 cnc wnd_cnc 15mins
 
-egg th_tcymru_match 1
-egg th_disguised_exe 2
+egg th_disguised_exe 1
 egg wnd_egg 15mins
 egg evaluation_mode OR
+
+sqli th_sqli_attempt 0
+sqli wnd_sqli 15mins
+sqli evaluation_mode OR
+
+spam th_mx_queries 0
+spam th_smtp 5 
+spam wnd_spam 15mins
+spam evaluation_mode OR

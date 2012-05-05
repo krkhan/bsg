@@ -3,7 +3,8 @@
 ##! of mx queries made, unique mx queries and total number
 ##! of smtp queries. 
 
-@load ./bot-attack
+@load botflex/utils/types
+@load botflex/config
 
 module Spam;
 
@@ -14,9 +15,9 @@ export {
 	type Info: record {
 		ts:                time             &log;
 		src_ip:		   addr		    &log;
-		total_mx:          count            &log;
-		uniq_mx:           count            &log;
-		total_smtp:	   count 	    &log;
+		mx_queries:        count            &log;
+		smtp_conns:	   count 	    &log;
+		msg:               string           &log;
 		
 	};
 	
@@ -24,61 +25,156 @@ export {
 	conn: Info &optional;
 	};
 	
+	## The contributory factors (or tributaries) to major event spam
+	type spam_tributary: enum { SMTP_threshold_crossed, MX_query_threshold_crossed };
+
+	## Expire interval for the global table concerned with maintaining cnc info
+	const wnd_spam = 15mins &redef;
+
+	## The evaluation mode (one of the modes defined in enum evaluation_mode in utils/types)
+	const spam_evaluation_mode = OR;
+
+	## The table that maps cnc_tributary enum values to strings
+	global tb_tributary_string: table[ spam_tributary ] of string &redef; 
+
+	## The event that spam.bro reports spam
+	global spam: event( ts: time, src_ip: addr, msg: string );
+
 	## Event that can be handled to access the spam
 	## record as it is sent on to the logging framework.
 	global log_spam: event(rec: Info);
 
 	## Thresholds for different contributors to the major event bot_attack
-	const uniq_mx_threshold = 1 &redef;
-	const total_mx_threshold = 1 &redef;
-	const total_smtp_threshold = 1 &redef;
+	const mx_threshold = 1 &redef;
+	const smtp_threshold = 1 &redef;
        }
 
 global spam_info:Spam::Info;
 
-event bro_init() &priority=5
+event bro_init()
 	{
 	Log::create_stream(Spam::LOG, [$columns=Info, $ev=log_spam]);
+	if ( "spam" in Config::table_config  )
+			{
+			if ( "th_smtp" in Config::table_config["spam"] )
+				{
+				smtp_threshold = to_count(Config::table_config["spam"]["th_smtp"]);
+				}
+			if ( "th_mx" in Config::table_config["spam"] )
+				{
+				mx_threshold = to_count(Config::table_config["spam"]["th_mx"]);
+				}
+			if ( "wnd_spam" in Config::table_config["spam"] )
+				{
+				wnd_spam = string_to_interval(Config::table_config["spam"]["wnd_spam"]);
+				}
+			if ( "evaluation_mode" in Config::table_config["spam"] )
+				{
+				spam_evaluation_mode = string_to_evaluationmode(Config::table_config["spam"]["evaluation_mode"]);
+				}
+			}
+	## Map all possible values of enum spam_tributary to corresponding strings
+	## here. This table will be used to formulate a human readable string for sharing 
+	## with other scripts.
+	tb_tributary_string[ SMTP_threshold_crossed ] = "Crossed SMTP connection threshold";
+	tb_tributary_string[ MX_query_threshold_crossed ] = "Crossed MX queries threshold";
 	}
 
 ## Type of the value of the global table table_spam
 ## Additional contributary factors that increase the confidence
 ## about major event bot_attack should be added here
 type SpamRecord: record {
-    uniq_mx:set[string];
-    total_mx:count;
-    uniq_smtp: set[conn_id];
-    uniq_mx_threshold_crossed: bool;
-    total_mx_threshold_crossed: bool;
-    _mx_threshold_crossed: bool;	
+    tb_tributary: table[ spam_tributary ] of bool;
+    n_mx_queries: count &default=0;
+    # Within an smtp connection, several messages fly back and forth between
+    # the source and destination. We need only the number of unique smtp 
+    # connections initiated by an internal host 	
+    uniq_smtp: set[conn_id];	
 };
 
-
-function evaluate_spam( src_ip: addr, t: table[addr] of SpamRecord  )
+## The following set of functions calculate and, or and majority on a table of
+## booleans
+function get_and( tb : table[spam_tributary] of bool ): bool
 	{
-	local s = t[src_ip];
-	if  ( |s$uniq_smtp| > total_smtp_threshold || s$total_mx > total_mx_threshold || |s$uniq_mx| > uniq_mx_threshold )
+	for ( rec in tb )
 		{
-		event Bot_Attack::spam( src_ip );
+		if ( !tb[rec] )
+			return F;
+		}
+	return T;
+	}
+
+function get_or( tb : table[spam_tributary] of bool ): bool
+	{
+	for ( rec in tb )
+		{
+		if ( tb[rec] )
+			return T;
+		}
+	return F;	
+	}
+
+function get_majority( tb : table[spam_tributary] of bool ): bool
+	{
+	local t = 0;
+	local f = 0;
+	for ( rec in tb )
+		{
+		if ( tb[rec] )
+			++t;
+		else
+			++f;
+		}
+
+	if ( f > t )
+		return F;
+	else
+		return T;
+	}
+
+## The function that decides whether or not the major event spam should
+## be generated. It is called (i) every time an entry in the global table table_spam
+## reaches certain age defined by the table attribute &create_expire, or 
+## (ii) Any of the counters for a source ip exceed their fixed thresholds. 
+function evaluate( src_ip: addr, t: table[addr] of SpamRecord  ): bool
+	{
+	local do_report: bool;
+	if ( spam_evaluation_mode == OR )
+		do_report = get_or(t[src_ip]$tb_tributary);
+	else if ( spam_evaluation_mode == AND )
+		do_report = get_and(t[src_ip]$tb_tributary);
+	else if ( spam_evaluation_mode == MAJORITY )
+		do_report = get_majority(t[src_ip]$tb_tributary);
+		
+	if( do_report )
+		{
+		## Other contributory factors to the event cnc should
+		## be appended to this msg.
+		local msg = "";
+		for ( rec in t[src_ip]$tb_tributary )
+			msg = msg + tb_tributary_string[rec] + ",";
+
+		event Spam::spam( network_time(), src_ip, msg );
 
 		## Log spam-related entries
 		spam_info$ts = network_time();
 		spam_info$src_ip = src_ip;
-		spam_info$uniq_mx = |t[src_ip]$uniq_mx|;
-		spam_info$total_mx = t[src_ip]$total_mx;
-		spam_info$total_smtp = |t[src_ip]$uniq_smtp|;
+		spam_info$mx_queries = |t[src_ip]$n_mx_queries|;
+		spam_info$smtp_conns = |t[src_ip]$uniq_smtp|;
+		spam_info$msg = msg;
 
 		Log::write(Spam::LOG,spam_info);
 
-		delete t[src_ip];
-		}		
+		return T;
+		}	
+	return F;	
 	}
 
 ## Called when an entry in the global table table_spam exceeds certain age, as specified
 ## in the table attribute create_expire.
 function spam_record_expired(t: table[addr] of SpamRecord, idx: any): interval
 	{
-	evaluate_spam(idx, t);
+	evaluate(idx, t);
 	return 0secs;
 	}
 
@@ -87,32 +183,44 @@ function spam_record_expired(t: table[addr] of SpamRecord, idx: any): interval
 ## or not to declare the major event bot_attack.
 global table_spam: table[addr] of SpamRecord &create_expire=2mins &expire_func=spam_record_expired;	
 
+
+function get_spam_record(): SpamRecord
+	{
+	local rec: SpamRecord;
+	local set_smtp_uniq: set[conn_id]; 
+	rec$uniq_smtp = set_smtp_uniq;
+
+	return rec;
+	}
+
 event dns_request(c: connection, msg: dns_msg, query: string, qtype: count, qclass: count)
 	{	
 	if(c$dns$qtype_name == "MX")
 		{
 		local src_ip = c$dns$id$orig_h;
+		local outbound = Site::is_local_addr(src_ip);
+		
+		if ( outbound )
+			{ 
+			if (src_ip !in table_spam)
+				table_spam[src_ip] = get_spam_record();
 
-		if (src_ip !in table_spam)
-			{
-			local rec: SpamRecord;
-			rec$total_mx=0;
-			local set_mx_uniq: set[string]; 
-			rec$uniq_mx=set_mx_uniq;
-			local set_smtp_uniq: set[conn_id]; 
-			rec$uniq_smtp=set_smtp_uniq;
+			# Update total mx queries
+			++ table_spam[src_ip]$n_mx_queries;
 
-			table_spam[src_ip]=rec;
+			if ( table_spam[src_ip]$n_mx_queries > mx_threshold )
+				{
+				table_spam[src_ip]$tb_tributary[ MX_query_threshold_crossed ]=T;
+				local done = evaluate( src_ip, table_spam );
+
+				## Reset mx parameters
+				if (done)
+					{
+					delete table_spam[src_ip]$tb_tributary[ MX_query_threshold_crossed ];
+					table_spam[src_ip]$n_mx_queries=0;
+					}	
+				}	
 			}
-
-		# Update total mx queries
-		++ table_spam[src_ip]$total_mx;
-
-		# Update unique mx queries
-		add table_spam[src_ip]$uniq_mx[query];
-
-		if ( |table_spam[src_ip]$uniq_mx| > uniq_mx_threshold || table_spam[src_ip]$total_mx > total_mx_threshold )
-			evaluate_spam( src_ip, table_spam );
 		}
 	}
 
@@ -121,25 +229,32 @@ event smtp_request(c: connection, is_orig: bool, command: string, arg: string) &
 	{
 	local src_ip = c$smtp$id$orig_h;
 
-	# if this is the first time src_ip appears
-	if (src_ip !in table_spam)
-		{
-		local rec: SpamRecord;
-		rec$total_mx=0;
-		local set_mx_uniq: set[string]; 
-		rec$uniq_mx=set_mx_uniq;
-		local set_smtp_uniq: set[conn_id]; 
-		rec$uniq_smtp=set_smtp_uniq;
+	local outbound = Site::is_local_addr(src_ip);
+		
+	if ( outbound )
+		{ 
+		# if this is the first time src_ip appears
+		if (src_ip !in table_spam)
+			table_spam[src_ip] = get_spam_record();
 
-		table_spam[src_ip]=rec;
+		if(c$id !in table_spam[src_ip]$uniq_smtp)
+				{
+				add table_spam[src_ip]$uniq_smtp[c$id]; 
+				if ( |table_spam[src_ip]$uniq_smtp| > smtp_threshold)
+					{
+					table_spam[src_ip]$tb_tributary[ SMTP_threshold_crossed ]=T;
+					local done = evaluate( src_ip, table_spam );
+
+					## Reset smtp parameters
+					if (done)
+						{
+						delete table_spam[src_ip]$tb_tributary[ SMTP_threshold_crossed ];
+						for ( rec in table_spam[src_ip]$uniq_smtp )
+							delete table_spam[src_ip]$uniq_smtp[rec];
+						}	
+					}
+				}
 		}
-
-	if(c$id !in table_spam[src_ip]$uniq_smtp)
-			{
-			add table_spam[src_ip]$uniq_smtp[c$id]; 
-			if ( |table_spam[src_ip]$uniq_smtp| > total_smtp_threshold)
-				evaluate_spam( src_ip, table_spam );
-			}
 
 	}
 	
