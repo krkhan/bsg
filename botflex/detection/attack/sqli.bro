@@ -15,8 +15,7 @@ export {
 	type Info: record {
 		ts:                time             &log;
 		src_ip: 	   addr		    &log;
-		sqli_uri:	   string           &log;
-		sqli_victims:	   string	    &log;
+		sqli_uri:	   set[string]      &log;
 			
 	};
 	
@@ -33,11 +32,8 @@ export {
 	## The contributory factors (or tributaries) to major event sqli attack
 	type sqli_tributary: enum { Signature_match, };
 
-	## The table that maps cnc_tributary enum values to strings
-	global tb_tributary_string: table[ sqli_tributary ] of string &redef;
-
 	## The event that sqli.bro reports sql injection attacks
-	global sqli: event( ts: time, src_ip: addr, uris: string, msg: string );
+	global sqli: event( ts: time, src_ip: addr, uris: set[string], msg: string );
 	
 	## Event that can be handled to access the spam
 	## record as it is sent on to the logging framework.
@@ -77,10 +73,6 @@ event bro_init() &priority=5
 				}
 			}
 
-	## Map all possible values of enum sqli_tributary to corresponding strings
-	## here. This table will be used to formulate a human readable string for sharing 
-	## with other scripts.
-	tb_tributary_string[ Signature_match ] = "HTTP request matched signature for Sql injection attack";
 	}
 
 ## Type of the value of the global table table_sqli
@@ -89,7 +81,6 @@ event bro_init() &priority=5
 type SqliRecord: record {
     tb_tributary: table[ sqli_tributary ] of bool;
     n_sqli_attempts: count &default=0;
-    sqli_victims: set[addr];
     sqli_uri: set[string];
 };
 
@@ -149,20 +140,16 @@ function evaluate( src_ip: addr, t: table[addr] of SqliRecord ): bool
 		
 	if( do_report )
 		{
-		## Other contributory factors to the event sqli should
-		## be appended to this msg
 		local msg = "";
-		for ( rec in t[src_ip]$tb_tributary )
-			msg = msg + tb_tributary_string[rec] + ",";
+		if ( t[src_ip]$tb_tributary[ Signature_match ] )
+			msg = msg + "HTTP request matched signature for Sql injection attack";
 
-		local str_uri = setstr_to_string(t[src_ip]$sqli_uri, ",");
-		event Sqli::sqli( network_time(), src_ip, msg, str_uri );
+		event Sqli::sqli( network_time(), src_ip, t[src_ip]$sqli_uri, msg );
 
 		## Log spam-related entries
 		sqli_info$ts = network_time();
 		sqli_info$src_ip = src_ip;
-		sqli_info$sqli_victims = setaddr_to_string(t[src_ip]$sqli_victims, ",");
-		sqli_info$sqli_uri = str_uri;
+		sqli_info$sqli_uri = t[src_ip]$sqli_uri;
 
 		Log::write(Sqli::LOG,sqli_info);
 
@@ -183,7 +170,6 @@ function get_sqli_record(): SqliRecord
 	{
 	local rec: SqliRecord;
 	local set_sqli_victims: set[addr]; 
-	rec$sqli_victims = set_sqli_victims;
 	local set_sqli_uri: set[string]; 
 	rec$sqli_uri = set_sqli_uri;
 
@@ -212,7 +198,6 @@ event http_request(c: connection, method: string, original_URI: string,
 			# Update number of sqli attempts
 			++ table_sqli[src_ip]$n_sqli_attempts;
 
-			add table_sqli[src_ip]$sqli_victims[c$http$id$resp_h];
 			add table_sqli[src_ip]$sqli_uri[unescaped_URI];
 
 			if ( table_sqli[src_ip]$n_sqli_attempts > sqli_attempt_threshold )

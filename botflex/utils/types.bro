@@ -1,6 +1,10 @@
 ##! A collection of botflex specific data-types and utility functions related to the representation
 ##! of one data type as another. 
 
+## The string used to format time in the function strftime()
+## (see bro.bif)
+const str_time = "%d/%m/%y %H:%M:%S" &redef;
+
 ## The evaluation mode to use (AND, OR or MAJORITY)
 type evaluation_mode: enum { AND, OR, MAJORITY }; 
 

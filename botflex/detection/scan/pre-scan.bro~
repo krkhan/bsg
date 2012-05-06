@@ -340,7 +340,7 @@ function check_scan(c: connection, established: bool, reverse: bool): bool
 	local orig = reverse ? id$resp_h : id$orig_h;
 	local resp = reverse ? id$orig_h : id$resp_h;
 	local outbound = Site::is_local_addr(orig);
-
+	
 	# The following works better than using get_conn_transport_proto()
 	# because c might not correspond to an active connection (which
 	# causes the function to fail).
@@ -455,19 +455,20 @@ function check_scan(c: connection, established: bool, reverse: bool): bool
 				else
 					{
 					local address_scan = F;
-					if ( outbound &&
+
+					if ( (outbound) &&
 					     # inside host scanning out?
-					     service in BlacklistMgr::blacklist_bad_ports?
+					     (service in BlacklistMgr::blacklist_bad_ports?
 					     thresh_check(report_critical_outbound_peer_scan, rcops_idx, orig, n):
-					     thresh_check(report_outbound_peer_scan, rops_idx, orig, n) )
+					     thresh_check(report_outbound_peer_scan, rops_idx, orig, n)) )
 						{
 						address_scan = T;
 
 						local submsg = "";
 						if ( service in BlacklistMgr::blacklist_bad_ports )
-							submsg = "critical";
+							submsg = "Critical";
 						else
-							submsg = "-";
+							submsg = "Medium";
 						NOTICE([$note=AddressScanOutbound,
 							$src=orig, $p=service,
 							$n=n,
@@ -476,22 +477,22 @@ function check_scan(c: connection, established: bool, reverse: bool): bool
 								orig, n, service),
 							$sub=submsg]);
 						}	
-
-					if ( ! outbound &&
-					     service in BlacklistMgr::blacklist_bad_ports?
+				
+					if ( (!outbound) &&
+					     (service in BlacklistMgr::blacklist_bad_ports?
 					     thresh_check(report_critical_peer_scan, rcops_idx, orig, n):
-					     thresh_check(report_peer_scan, rops_idx, orig, n) )
+					     thresh_check(report_peer_scan, rops_idx, orig, n)) )
 						{
 						address_scan = T;
-
+				
 						local subms = "";
 						if ( service in BlacklistMgr::blacklist_bad_ports )
-							subms = "critical";
+							subms = "Critical";
 						else
-							subms = "-";
+							subms = "Medium";
 
-						# In case of inbound scan, i need the destination addrs, i.e., the victims in our
-						# network. I'll provide that info as a string delimited by ':', appended to the 
+						# In case of inbound scan, we need the destination addrs, i.e., the victims in our
+						# network. We'll provide that info as a string delimited by ':', appended to the 
 						# original msg
 						local victims = ":";
 						for ( a in distinct_peers[orig] )
@@ -554,10 +555,10 @@ function check_scan(c: connection, established: bool, reverse: bool): bool
 			if ( |distinct_low_ports[orig]| == priv_scan_trigger &&
 			     orig !in Site::neighbor_nets )
 				{
-				local svrc_msg = fmt("low port trolling %s %s", orig, service);
+				local svrc_msg = fmt("low port trolling of %s by %s (%s)", resp, orig, service);
 				NOTICE([$note=LowPortTrolling, $src=orig, $dst=resp,
 					$identifier=fmt("%s", orig),
-					$p=service, $msg=svrc_msg]);
+					$p=service, $msg=svrc_msg, $sub="Critical"]);
 				}
 
 			if ( ignore_scanners_threshold > 0 &&
@@ -590,7 +591,8 @@ function check_scan(c: connection, established: bool, reverse: bool): bool
 					$p=service,
 					$identifier=fmt("%s-%d", orig, n),
 					$msg=fmt("%s has scanned %d ports of %s",
-					orig, m, resp)]);
+					orig, m, resp), 
+					$sub = "Medium"]);
 				}
 			}
 		}

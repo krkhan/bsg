@@ -43,10 +43,7 @@ export {
 	const wnd_egg = 15mins &redef;
 
 	## The evaluation mode (one of the modes defined in enum evaluation_mode in utils/types)
-	const egg_evaluation_mode = OR;
-
-	## The table that maps egg_tributary enum values to strings
-	global tb_tributary_string: table[ egg_tributary ] of string &redef; 
+	const egg_evaluation_mode = OR; 
 
 	## Thresholds for different contributors to the major event of egg download/upload
 	const disguised_exe_threshold = 1 &redef;
@@ -58,8 +55,8 @@ export {
 
 	## The event that sufficient evidence has been gathered to declare the
 	## egg upload tributary in attack phase of botnet infection lifecycle
-	global egg_upload: event( ts: time, src_ip: addr, egg_url: string,
-				    md5: string, msg: string );
+	global egg_upload: event( ts: time, src_ip: addr, egg_url: string, md5: string,
+				  disguised_ip: set[string], disguised_url: set[string], msg: string );
 
 	## Event that can be handled to access the egg_download
 	## record as it is sent on to the logging framework.
@@ -139,11 +136,6 @@ event bro_init() &priority=5
 				egg_evaluation_mode = string_to_evaluationmode(Config::table_config["egg"]["evaluation_mode"]);
 				}	
 			}
-	## Map all possible values of enum cnc_tributary to corresponding strings
-	## here. This table will be used to formulate a human readable string for sharing 
-	## with other scripts.
-	tb_tributary_string[ Tcymru_match ] = "Saw malicious exe file (TeamCymru match)";
-	tb_tributary_string[ Disguised_exe ] = "Saw a disguised exe file";
 	}
 global egg_info: Egg::Info;
 
@@ -214,22 +206,36 @@ function evaluate( src_ip: addr, t: table[addr] of EggRecord ): bool
 		local str_disguised_url = setstr_to_string(t[src_ip]$disguised_url, ","); 
 		egg_info$disguised_url = str_disguised_url;
 
-		## Other contributory factors to the event egg down/upload should
-		## be appended to this msg.
-		local msg = "";
-		for ( itm in t[src_ip]$tb_tributary )
-			msg = msg + tb_tributary_string[itm] + ",";
-		egg_info$msg = msg;
 		
 		if ( t[src_ip]$tag == Download )
 			{
-    			event egg_download( network_time(), src_ip, t[src_ip]$egg_ip, t[src_ip]$egg_url, t[src_ip]$md5,
-					    t[src_ip]$disguised_ip, t[src_ip]$disguised_url, msg );
+			local msg1 = "";
+			if ( t[src_ip]$tb_tributary[Tcymru_match] )
+				msg1 = msg1 + fmt("Host downloaded exe (md5: %s) tagged as malicious by TeamCymru;",
+						   t[src_ip]$md5);
+			if ( t[src_ip]$tb_tributary[Disguised_exe] )
+				msg1 = msg1 + fmt("Host downloaded exe file(s) with misleading extensions (%s);", 
+						   setstr_to_string(t[src_ip]$disguised_url,",") );
+
+    			event Egg::egg_download( network_time(), src_ip, t[src_ip]$egg_ip, t[src_ip]$egg_url, t[src_ip]$md5,
+					    t[src_ip]$disguised_ip, t[src_ip]$disguised_url, msg1 );
+
+			egg_info$msg = msg1;
 			Log::write(Egg::LOG_DOWN,egg_info);
 			}
 		else
 			{
-    			event egg_upload( network_time(), src_ip, t[src_ip]$egg_url, t[src_ip]$md5, msg );
+			local msg2 = "";
+			if ( t[src_ip]$tb_tributary[Tcymru_match] )
+				msg2 = msg2 + fmt("Host uploaded exe (md5: %s) tagged as malicious by TeamCymru;",
+						   t[src_ip]$md5);
+			if ( t[src_ip]$tb_tributary[Disguised_exe] )
+				msg2 = msg2 + fmt("Host uploaded exe file(s) with misleading extensions (%s);", 
+						   setstr_to_string(t[src_ip]$disguised_url,",") );
+    			event egg_upload( network_time(), src_ip, t[src_ip]$egg_url, t[src_ip]$md5, 
+					  t[src_ip]$disguised_ip, t[src_ip]$disguised_url, msg2 );
+
+			egg_info$msg = msg2;
 			Log::write(Egg::LOG_UP,egg_info);
 			}
 		return T;

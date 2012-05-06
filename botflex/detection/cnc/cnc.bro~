@@ -36,9 +36,6 @@ export {
 	## The evaluation mode (one of the modes defined in enum evaluation_mode in utils/types)
 	const cnc_evaluation_mode = OR;
 
-	## The table that maps cnc_tributary enum values to strings
-	global tb_tributary_string: table[ cnc_tributary ] of string &redef; 
-
 	## Thresholds for different contributors to the major event cnc
 	const dns_failure_threshold = 20 &redef;
 	const cnc_blacklist_match_threshold = 0 &redef;
@@ -101,13 +98,6 @@ event bro_init()
 				cnc_evaluation_mode = string_to_evaluationmode(Config::table_config["cnc"]["evaluation_mode"]);
 				}
 			}
-	## Map all possible values of enum cnc_tributary to corresponding strings
-	## here. This table will be used to formulate a human readable string for sharing 
-	## with other scripts.
-	tb_tributary_string[ Dns_failure ] = "High DNS fail rate";
-	tb_tributary_string[ Blacklist_cnc_match ] = "Host contacted known C&C ip/url";
-	tb_tributary_string[ Blacklist_rbn_match ] = "Host contacted RBN ip/url";
-	tb_tributary_string[ Blacklist_cnc_dns_match ] = "Host made dns queries about C&C url";
 	}
 
 global cnc_info: CNC::Info;
@@ -168,11 +158,18 @@ function evaluate( src_ip: addr, t: table[addr] of CncRecord ): bool
 		
 	if( do_report )
 		{
-		## Other contributory factors to the event cnc should
-		## be appended to this msg.
 		local msg = "";
-		for ( rec in t[src_ip]$tb_tributary )
-			msg = msg + tb_tributary_string[rec] + ",";
+		if( t[src_ip]$tb_tributary[ Dns_failure ] ) 
+			msg = msg + "High DNS failure rate, possible use of botnet domain flux;";
+			
+		if ( t[src_ip]$tb_tributary[ Blacklist_cnc_match ] )
+			msg = msg + "Host contacted known C&C ip/url;";
+
+		if ( t[src_ip]$tb_tributary[ Blacklist_rbn_match ] )
+			msg = msg + "Host contacted RBN ip/url;";
+
+		if ( t[src_ip]$tb_tributary[ Blacklist_cnc_dns_match ] )
+			msg = msg + "Host made dns queries about known C&C url;";
 
     		event CNC::cnc( network_time(), src_ip, msg, t[src_ip]$ip_cnc, t[src_ip]$url_cnc, 
 				t[src_ip]$url_cnc_dns, t[src_ip]$ip_rbn);		

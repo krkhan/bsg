@@ -34,9 +34,6 @@ export {
 	## The evaluation mode (one of the modes defined in enum evaluation_mode in utils/types)
 	const spam_evaluation_mode = OR;
 
-	## The table that maps cnc_tributary enum values to strings
-	global tb_tributary_string: table[ spam_tributary ] of string &redef; 
-
 	## The event that spam.bro reports spam
 	global spam: event( ts: time, src_ip: addr, msg: string );
 
@@ -73,11 +70,7 @@ event bro_init()
 				spam_evaluation_mode = string_to_evaluationmode(Config::table_config["spam"]["evaluation_mode"]);
 				}
 			}
-	## Map all possible values of enum spam_tributary to corresponding strings
-	## here. This table will be used to formulate a human readable string for sharing 
-	## with other scripts.
-	tb_tributary_string[ SMTP_threshold_crossed ] = "Crossed SMTP connection threshold";
-	tb_tributary_string[ MX_query_threshold_crossed ] = "Crossed MX queries threshold";
+	
 	}
 
 ## Type of the value of the global table table_spam
@@ -148,11 +141,11 @@ function evaluate( src_ip: addr, t: table[addr] of SpamRecord  ): bool
 		
 	if( do_report )
 		{
-		## Other contributory factors to the event cnc should
-		## be appended to this msg.
 		local msg = "";
-		for ( rec in t[src_ip]$tb_tributary )
-			msg = msg + tb_tributary_string[rec] + ",";
+		if ( t[src_ip]$tb_tributary[ SMTP_threshold_crossed ] )
+			msg = msg + "Large number of SMTP connections initiated;";
+		if ( t[src_ip]$tb_tributary[ MX_query_threshold_crossed ] )
+			msg = msg + "Large number of MX queries made;";
 
 		event Spam::spam( network_time(), src_ip, msg );
 
