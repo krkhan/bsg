@@ -24,7 +24,7 @@ export {
 	};
 	
 	## Expire interval for the global table concerned with maintaining sqli info
-	const wnd_sqli = 15mins &redef;
+	const wnd_sqli = 10mins &redef;
 
 	## The evaluation mode (one of the modes defined in enum evaluation_mode in utils/types)
 	const sqli_evaluation_mode = OR;

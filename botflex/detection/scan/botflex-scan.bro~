@@ -93,17 +93,15 @@ redef Notice::policy += {
                        }
 
                else if ( n$note == Scan::AddressScanOutbound )
-                       {print "ob"; print n$src;
+                       {
 			local msg2 = fmt("%s: %s: Severity: %s",strftime(str_time, t),n$msg,n$sub);
-			#print fmt("t: %s", t);print fmt("n$src: %s", n$src);print fmt("n$p: %s", n$p);print fmt("msg2: %s", msg2);
-			#print fmt("n$sub: %s", n$sub);
 			event BotflexScan::scan_ob( t, n$src, n$p, msg2, "Address Scan", n$sub  ); 
 			event BotflexScan::log_scan(t, n$src, "Address Scan", 0, n$n, n$p, 
 						      msg2, "", T );	
                        }
 
 		else if ( n$note == Scan::AddressScanInbound )
-                       {print "ib";print n$src;
+                       {
 			# n$msg has the form <the msg>:<victim1 victim2 victim3..>
 			local msg_arr = split(n$msg, /[:]/);
 			local str_victims = split( msg_arr[2], /[[:blank:]]*/ );
@@ -138,11 +136,6 @@ redef Notice::policy += {
 	
        }]
 };
-
-event say_hello( str: string)
-	{
-	print fmt("Hello %s",str);
-	}
 
 
 # Logging scan information. The last parameter <outbound> specifies which

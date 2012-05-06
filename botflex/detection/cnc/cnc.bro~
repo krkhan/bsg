@@ -31,7 +31,7 @@ export {
 	type cnc_tributary: enum { Dns_failure, Blacklist_cnc_match, Blacklist_rbn_match, Blacklist_cnc_dns_match };
 
 	## Expire interval for the global table concerned with maintaining cnc info
-	const wnd_cnc = 120mins &redef;
+	const wnd_cnc = 5mins &redef;
 
 	## The evaluation mode (one of the modes defined in enum evaluation_mode in utils/types)
 	const cnc_evaluation_mode = OR;
@@ -384,11 +384,11 @@ event connection_established( c: connection )
 event http_reply(c: connection, version: string, code: count, reason: string)
 	{
 	local outbound = Site::is_local_addr(c$id$orig_h);
+	local our_ip = outbound? c$id$orig_h: c$id$resp_h;
+	local other_ip = outbound? c$id$resp_h: c$id$orig_h;
 
-	if(outbound)
-		{
-		if ( c$http$host in BlacklistMgr::tb_blacklists["cnc_url"] )
-			event CNC::cnc_url_match( c$id$orig_h, c$http$host ); 		
-		}
+	if ( c$http$host in BlacklistMgr::tb_blacklists["cnc_url"] )
+		event CNC::cnc_url_match( our_ip, c$http$host ); 		
+		
 	}
 

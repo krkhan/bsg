@@ -29,7 +29,7 @@ export {
 	type spam_tributary: enum { SMTP_threshold_crossed, MX_query_threshold_crossed };
 
 	## Expire interval for the global table concerned with maintaining cnc info
-	const wnd_spam = 15mins &redef;
+	const wnd_spam = 2mins &redef;
 
 	## The evaluation mode (one of the modes defined in enum evaluation_mode in utils/types)
 	const spam_evaluation_mode = OR;
@@ -174,7 +174,7 @@ function spam_record_expired(t: table[addr] of SpamRecord, idx: any): interval
 # The global state table that maintains various information pertaining to the
 ## major event bot_attack, and is analyzed when a decision has to be made whether
 ## or not to declare the major event bot_attack.
-global table_spam: table[addr] of SpamRecord &create_expire=2mins &expire_func=spam_record_expired;	
+global table_spam: table[addr] of SpamRecord &create_expire=wnd_spam &expire_func=spam_record_expired;	
 
 
 function get_spam_record(): SpamRecord

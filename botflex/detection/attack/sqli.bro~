@@ -201,7 +201,7 @@ event http_request(c: connection, method: string, original_URI: string,
 			add table_sqli[src_ip]$sqli_uri[unescaped_URI];
 
 			if ( table_sqli[src_ip]$n_sqli_attempts > sqli_attempt_threshold )
-				{print c$http;
+				{
 				table_sqli[src_ip]$tb_tributary[ Signature_match ]=T;
 				local done = evaluate( src_ip, table_sqli );
 

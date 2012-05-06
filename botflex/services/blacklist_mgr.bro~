@@ -15,8 +15,12 @@ export {
 	## the corresponding entry in tb_blacklists (where subnets were strings) 
 	const blacklist_rbn_subnet: set[subnet] &redef; 
 
+	## blacklist for bogon subnets. A packet routed over the public Internet should not 
+	## have a source address in a bogon range (http://www.team-cymru.org/Services/Bogons/).
+	const blacklist_bogon_subnet: set[subnet] &redef; 
+
 	## Blacklist of most exploited / vulnerable ports
-	const blacklist_bad_ports: set[subnet] &redef; 
+	const blacklist_bad_ports: set[port] &redef; 
 
 	## Name of the file that contains filenames of different blacklists
 	## such as cnc_ip, cnc_url, spam_ip, bad_ip etc. The format of the file
@@ -65,6 +69,14 @@ event get_blacklists(srcfile: string) &priority=30
 			{
 			for ( str_subnet in tb_blacklists[file_id] )
 				add blacklist_rbn_subnet[ to_subnet(str_subnet) ];
+
+			# delete the redundant string version of the subnet list from tb_blacklists
+			delete tb_blacklists[file_id];
+			}
+		if ( file_id == "bogon_subnet" )
+			{
+			for ( str_subnet in tb_blacklists[file_id] )
+				add blacklist_bogon_subnet[ to_subnet(str_subnet) ];
 
 			# delete the redundant string version of the subnet list from tb_blacklists
 			delete tb_blacklists[file_id];

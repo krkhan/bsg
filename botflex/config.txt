@@ -10,7 +10,7 @@ scan evaluation_mode OR
 
 exploit th_ssh_login 10
 exploit wnd_breakin 15mins
-exploit wnd_exploit 30mins
+exploit wnd_exploit 2mins
 exploit evaluation_mode OR
 exploit evaluation_breakin_mode OR
 
@@ -28,7 +28,7 @@ sqli evaluation_mode OR
 
 spam th_mx_queries 0
 spam th_smtp 10 
-spam wnd_spam 1min
+spam wnd_spam 2mins
 spam evaluation_mode OR
 
 correlation wnd_correlation 6hrs

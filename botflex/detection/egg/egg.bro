@@ -1,4 +1,4 @@
-##! This script analyzes the egg-download phase of botnet infection lifecycle.
+##! This script analyzes the egg-down/upload phase of botnet infection lifecycle.
 ##! It sets a threshold on the number of malicious binaries seen and
 ##! the number of exes trasported over http disguised as some other filetype
 ##! and uses the evaluate() function to decide if the major event egg_download 
@@ -85,7 +85,11 @@ redef Notice::policy += {
                if ( n$note == HTTP::Incorrect_File_Type && ( /application\/x-dosexec/ in n$msg || /application\/x-executable/ in n$msg ) )
                        {
 			local c = n$conn;
-			event Egg::disguised_exe( n$ts, c$id$orig_h, c$id$resp_h, HTTP::build_url_http(c$http) );
+			local url = HTTP::build_url_http(c$http);
+			# It's ok if the extension is .bin and it carries an exe as that's how some
+			# software delivers its updates.
+			if ( /bin$/ !in url)
+				event Egg::disguised_exe( n$ts, c$id$orig_h, c$id$resp_h, url );
                        }
 
                else if ( n$note == HTTP::Malware_Hash_Registry_Match )

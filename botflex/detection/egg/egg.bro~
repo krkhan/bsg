@@ -85,7 +85,11 @@ redef Notice::policy += {
                if ( n$note == HTTP::Incorrect_File_Type && ( /application\/x-dosexec/ in n$msg || /application\/x-executable/ in n$msg ) )
                        {
 			local c = n$conn;
-			event Egg::disguised_exe( n$ts, c$id$orig_h, c$id$resp_h, HTTP::build_url_http(c$http) );
+			local url = HTTP::build_url_http(c$http);
+			# It's ok if the extension is .bin and it carries an exe as that's how some
+			# software delivers its updates.
+			if ( /bin$/ !in url)
+				event Egg::disguised_exe( n$ts, c$id$orig_h, c$id$resp_h, url );
                        }
 
                else if ( n$note == HTTP::Malware_Hash_Registry_Match )
@@ -219,6 +223,8 @@ function evaluate( src_ip: addr, t: table[addr] of EggRecord ): bool
 
     			event Egg::egg_download( network_time(), src_ip, t[src_ip]$egg_ip, t[src_ip]$egg_url, t[src_ip]$md5,
 					    t[src_ip]$disguised_ip, t[src_ip]$disguised_url, msg1 );
+
+			egg_info$msg = msg1;
 			Log::write(Egg::LOG_DOWN,egg_info);
 			}
 		else
@@ -232,6 +238,8 @@ function evaluate( src_ip: addr, t: table[addr] of EggRecord ): bool
 						   setstr_to_string(t[src_ip]$disguised_url,",") );
     			event egg_upload( network_time(), src_ip, t[src_ip]$egg_url, t[src_ip]$md5, 
 					  t[src_ip]$disguised_ip, t[src_ip]$disguised_url, msg2 );
+
+			egg_info$msg = msg2;
 			Log::write(Egg::LOG_UP,egg_info);
 			}
 		return T;

@@ -19,6 +19,7 @@ export {
 		infected_target:			addr		        &log;
 		rule_id:				string			&log; 	
 		infector_list:   			set[addr]               &log;
+		exploit_url:	 			set[string]		&log;
 		egg_source_list: 			set[string]		&log;
 		cnc_ip_list:   				set[string]		&log;
 		cnc_url_list:   			set[string]		&log;
@@ -115,7 +116,8 @@ type ExploitRecord: record {
 	ts: time &default=network_time(); 
 	msg: string&default="";
 	ssh_attackers: set[addr]; 
-	blacklist_attacker: string &default="";	     	
+	blacklist_attacker: string &default="";	
+	blacklist_attacker_url: string &default="";	     	
 };
 
 function get_exploit_record(): ExploitRecord
@@ -274,6 +276,7 @@ function get_bot_record(): BotRecord
 type CorrelationRecord: record {
 	tb_tributary: table[ bot_infection_tributary ] of count;
 	infector_list: set[addr];
+	exploit_url: set[string];
 	egg_source_list: set[string];
 	cnc_ip_list: set[string];
 	cnc_url_list: set[string];
@@ -416,7 +419,7 @@ global table_bot: table[addr] of BotRecord &create_expire=wnd_bot;
 ##-------------------------------------------------------------------------------------
 event BotflexScan::scan_ib( ts: time, src_ip: addr, victim: addr, target_port: port, 
 			     msg: string, tag: string, severity: string )
-	{	print "scan";
+	{	
 	if (victim !in table_correlation)
 		table_correlation[victim] = get_correlation_record();
 
@@ -442,12 +445,14 @@ event BotflexScan::scan_ib( ts: time, src_ip: addr, victim: addr, target_port: p
 
 ## Client exploit related events
 ##-------------------------------------------------------------------------------------
-event Exploit::exploit( ts: time, victim: addr, msg: string, ssh_attackers: set[addr], blacklist_attacker: string )
+event Exploit::exploit( ts: time, victim: addr, msg: string, ssh_attackers: set[addr], 
+			blacklist_attacker: string, blacklist_attacker_url: string )
 	{
 	if (victim !in table_correlation)
 		table_correlation[victim] = get_correlation_record();
 
 	++ table_correlation[victim]$tb_tributary[ Exploit ];
+	add table_correlation[victim]$exploit_url[blacklist_attacker_url];
 	for (attacker in ssh_attackers)
 		add table_correlation[victim]$infector_list[attacker];
 	table_correlation[victim]$exploit = table_correlation[victim]$exploit + msg +";";
@@ -573,7 +578,7 @@ event Sqli::sqli( ts: time, src_ip: addr, uris: set[string], msg: string )
 
 event BotflexScan::scan_ob( ts: time, src_ip: addr, target_port: port, 
 			     msg: string, tag: string, severity: string )
-	{print "In correlation: scan ob";
+	{
 	if (src_ip !in table_correlation)
 		table_correlation[src_ip] = get_correlation_record();
 
