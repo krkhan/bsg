@@ -12,6 +12,11 @@
 #include <net/ethernet.h>
 #include <netinet/ip.h>
 
+typedef struct {
+  pcap_dumper_t *writer;
+  char *fname;
+} HashTableEntry;
+
 void print_hash_table(gpointer key, gpointer value, gpointer data)
 {
   printf("%s\n", (char *) key);
@@ -19,15 +24,21 @@ void print_hash_table(gpointer key, gpointer value, gpointer data)
 
 void free_hash_table(gpointer key, gpointer value, gpointer data)
 {
+  HashTableEntry *entry = (HashTableEntry *) value;
+
   free(key);
-  pcap_dump_close((pcap_dumper_t *) value);
+  if(entry->writer != NULL) {
+    pcap_dump_close(entry->writer);
+  }
+  free(entry->fname);
+  g_free(entry);
 }
 
-void fill_hash_table(GHashTable *hash, char *fname, pcap_t *reader)
+void fill_hash_table(GHashTable *hash, char *listfname, pcap_t *reader)
 {
   FILE *listfd;
 
-  listfd = fopen(fname, "r");
+  listfd = fopen(listfname, "r");
 
   if(listfd == NULL) {
     perror("fopen");
@@ -59,14 +70,17 @@ void fill_hash_table(GHashTable *hash, char *fname, pcap_t *reader)
         // and is not present in the hashtable
         // create a pcap dumper and associate it with the ip
         char *key, *fname;
+        HashTableEntry *entry = g_new0(HashTableEntry, 1);
 
         key = strdup(ip);
 
         asprintf(&fname, "%s.pcap", ip);
-        pcap_dumper_t *writer = pcap_dump_open(reader, fname);
-        free(fname);
+        entry->writer = NULL;
+        // pcap_dumper_t *writer = pcap_dump_open(reader, fname);
+        // entry->writer = writer;
+        entry->fname = fname;
 
-        g_hash_table_insert(hash, key, writer);
+        g_hash_table_insert(hash, key, entry);
       }
     }
   }
@@ -125,15 +139,23 @@ int main(int argc, char *argv[])
     inet_ntop(AF_INET, &(ip->ip_src), ip_src, INET_ADDRSTRLEN);
     inet_ntop(AF_INET, &(ip->ip_dst), ip_dst, INET_ADDRSTRLEN);
 
-    pcap_dumper_t *writer;
+    HashTableEntry *entry;
 
     // if src or dst ip is in the hashtable, use the associated
     // dumper for writing the packet to the respective pcap file
-    if((writer = g_hash_table_lookup(hash, ip_src)) != NULL) {
-      pcap_dump((u_char *) writer, &header, packet);
+    if((entry = g_hash_table_lookup(hash, ip_src)) != NULL) {
+      if(entry->writer == NULL) {
+        pcap_dumper_t *writer = pcap_dump_open(reader, entry->fname);
+        entry->writer = writer;
+      }
+      pcap_dump((u_char *) entry->writer, &header, packet);
     }
-    if((writer = g_hash_table_lookup(hash, ip_dst)) != NULL) {
-      pcap_dump((u_char *) writer, &header, packet);
+    if((entry = g_hash_table_lookup(hash, ip_dst)) != NULL) {
+      if(entry->writer == NULL) {
+        pcap_dumper_t *writer = pcap_dump_open(reader, entry->fname);
+        entry->writer = writer;
+      }
+      pcap_dump((u_char *) entry->writer, &header, packet);
     }
   }
 
