@@ -1,0 +1,3 @@
+cnc_ip ./files/cnc_ip.txt
+cnc_url ./files/cnc_url.txt
+spam_url ./files/spam_url.txt
